@@ -1,0 +1,187 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// 用户表
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  username  String?  @unique
+  displayName String?
+  avatar    String?
+  passwordHash String
+  
+  // 使用String字段替代枚举
+  role      String   @default("USER") // USER, ADMIN, MODERATOR
+  status    String   @default("ACTIVE") // ACTIVE, INACTIVE, BANNED, PENDING
+  
+  // 时间戳
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  lastLoginAt  DateTime?
+  
+  // 元数据（使用String存储JSON）
+  metadata     String?
+  
+  // 关联关系
+  threads      Thread[]
+  messages     Message[]
+  files        File[]
+  sessions     Session[]
+  preferences  UserPreferences?
+
+  // 表名映射
+  @@map("users")
+}
+
+// 用户偏好设置表
+model UserPreferences {
+  id       String @id @default(cuid())
+  userId   String @unique
+  
+  // 界面设置
+  theme    String @default("system")
+  language String @default("zh-CN")
+  
+  // 通知设置
+  emailNotifications String @default("true") // boolean as string
+  pushNotifications  String @default("true")
+  soundNotifications String @default("true")
+  
+  // AI 设置
+  defaultModel       String @default("gpt-4")
+  defaultTemperature Float  @default(0.7)
+  systemPrompt       String?
+  
+  // 时间戳
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // 关联关系
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+// 对话线程表
+model Thread {
+  id       String @id @default(cuid())
+  title    String?
+  userId   String
+  
+  // AI 配置
+  model        String @default("gpt-4")
+  temperature  Float  @default(0.7)
+  maxTokens    Int    @default(2048)
+  systemPrompt String?
+  
+  // 状态
+  status String @default("ACTIVE") // ACTIVE, ARCHIVED, DELETED
+  
+  // 时间戳
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  
+  // 元数据（使用String存储JSON）
+  metadata String?
+  
+  // 关联关系
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@map("threads")
+}
+
+// 消息表
+model Message {
+  id       String @id @default(cuid())
+  threadId String
+  userId   String?
+  
+  // 消息类型和角色（使用String替代枚举）
+  type     String      // HUMAN, AI, SYSTEM, TOOL
+  role     String?     // USER, ASSISTANT, SYSTEM, TOOL
+  content  String      // 存储JSON字符串
+  
+  // 工具调用（使用String存储JSON）
+  toolCalls   String? // JSON string
+  toolResults String? // JSON string
+  
+  // 消息层次结构
+  parentId String?
+  parent   Message? @relation("MessageThread", fields: [parentId], references: [id])
+  children Message[] @relation("MessageThread")
+  
+  // 时间戳
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  
+  // 元数据（使用String存储JSON）
+  metadata String?
+  
+  // 关联关系
+  thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  files  File[] @relation("MessageFiles")
+
+  @@map("messages")
+}
+
+// 文件表
+model File {
+  id           String @id @default(cuid())
+  filename     String
+  originalName String
+  mimetype     String
+  size         Int
+  path         String
+  url          String?
+  
+  // 文件分类（使用String替代枚举）
+  category String @default("OTHER") // AVATAR, DOCUMENT, IMAGE, AUDIO, VIDEO, OTHER
+  
+  // 关联用户
+  userId String?
+  
+  // 时间戳
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  
+  // 元数据（使用String存储JSON）
+  metadata String?
+  
+  // 关联关系
+  user     User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  messages Message[] @relation("MessageFiles")
+
+  @@map("files")
+}
+
+// 会话表（用于JWT会话管理）
+model Session {
+  id        String @id @default(cuid())
+  userId    String
+  token     String @unique
+  userAgent String?
+  ipAddress String?
+  
+  // 时间戳
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  
+  // 关联关系
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+} 

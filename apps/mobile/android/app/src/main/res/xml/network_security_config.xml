@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+  <domain-config cleartextTrafficPermitted="true">
+    <!-- 允许连接到localhost -->
+    <domain includeSubdomains="false">localhost</domain>
+    
+    <!-- Android模拟器的localhost别名 -->
+    <domain includeSubdomains="false">10.0.2.2</domain>
+    
+    <!-- 您的WiFi网络IP -->
+    <domain includeSubdomains="false">192.168.3.40</domain>
+    
+    <!-- 您的VPN网络IP -->
+    <domain includeSubdomains="false">10.1.224.148</domain>
+    
+    <!-- 其他可能的本地IP范围 -->
+    <domain includeSubdomains="false">192.168.1.0/24</domain>
+    <domain includeSubdomains="false">10.0.0.0/8</domain>
+    
+    <base-config cleartextTrafficPermitted="true"/>
+  </domain-config>
+</network-security-config> 

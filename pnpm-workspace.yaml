@@ -1,0 +1,26 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+shared-workspace-lockfile: true
+
+# 提升常用依赖到根目录
+hoist-pattern:
+  - '@babel/*'
+  - '@expo/*'
+  - 'react'
+  - 'react-dom'
+  - 'react-native'
+  - 'typescript'
+
+public-hoist-pattern:
+  - '@babel/runtime'
+  - 'expo'
+  - 'react'
+  - 'react-dom'
+  - 'react-native'
+
+# 强制使用特定版本避免冲突
+overrides:
+  react: ^18.2.0
+  react-dom: ^18.2.0 
