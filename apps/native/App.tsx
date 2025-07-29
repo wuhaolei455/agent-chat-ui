@@ -126,6 +126,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [lastMessageId, setLastMessageId] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
   
   const scrollViewRef = useRef<ScrollView>(null);
   const textInputRef = useRef<TextInput>(null);
@@ -186,7 +187,7 @@ export default function App() {
   }, [chatHistory]);
 
   // 发送消息到LangChain API
-  const sendMessage = async () => {
+  const sendMessageInternal = async (isRetry = false) => {
     if (!message.trim() && contentBlocks.length === 0) {
       Alert.alert('提示', '请输入消息或选择文件');
       return;
@@ -264,6 +265,9 @@ export default function App() {
       setIsLoading(false);
     }
   };
+
+  // 包装函数供UI调用
+  const sendMessage = () => sendMessageInternal(false);
 
   // 清空聊天历史
   const clearChat = () => {
@@ -397,24 +401,36 @@ export default function App() {
             )}
           </TouchableOpacity>
           
-          <TextInput
-            ref={textInputRef}
-            style={styles.messageInput}
-            value={message}
-            onChangeText={setMessage}
-            placeholder="输入消息..."
-            placeholderTextColor="#999"
-            multiline
-            maxLength={1000}
-            editable={!isLoading}
-            textAlignVertical="center"
-            onSubmitEditing={() => {
-              if (!isLoading && (message.trim() || contentBlocks.length > 0)) {
-                sendMessage();
-              }
-            }}
-            blurOnSubmit={false}
-          />
+          <View style={styles.inputWrapper}>
+            <TextInput
+              ref={textInputRef}
+              style={styles.messageInput}
+              value={message}
+              onChangeText={setMessage}
+              placeholder="输入消息..."
+              placeholderTextColor="#999"
+              multiline
+              maxLength={1000}
+              editable={!isLoading}
+              textAlignVertical="center"
+              onSubmitEditing={() => {
+                if (!isLoading && (message.trim() || contentBlocks.length > 0)) {
+                  sendMessageInternal();
+                }
+              }}
+              blurOnSubmit={false}
+            />
+            {message.length > 800 && (
+              <View style={styles.characterCounter}>
+                <Text style={[
+                  styles.counterText,
+                  message.length > 950 && styles.counterTextWarning
+                ]}>
+                  {message.length}/1000
+                </Text>
+              </View>
+            )}
+          </View>
           
           <TouchableOpacity 
             onPress={sendMessage}
@@ -634,8 +650,11 @@ const styles = StyleSheet.create({
   attachButtonDisabled: {
     backgroundColor: '#f8f8f8',
   },
-  messageInput: {
+  inputWrapper: {
     flex: 1,
+    position: 'relative',
+  },
+  messageInput: {
     borderWidth: 1,
     borderColor: '#e0e0e0',
     borderRadius: 20,
@@ -645,6 +664,23 @@ const styles = StyleSheet.create({
     maxHeight: 100,
     backgroundColor: '#f8f8f8',
     color: '#333',
+  },
+  characterCounter: {
+    position: 'absolute',
+    bottom: 4,
+    right: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  counterText: {
+    fontSize: 10,
+    color: '#666',
+  },
+  counterTextWarning: {
+    color: '#f59e0b',
+    fontWeight: '600',
   },
   sendButton: {
     width: 36,
