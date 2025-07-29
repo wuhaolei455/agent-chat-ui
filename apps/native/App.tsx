@@ -135,6 +135,8 @@ export default function App() {
     removeBlock,
     resetBlocks,
     showFilePicker,
+    isProcessing,
+    getFileStats,
   } = useFileUpload();
 
   // 键盘监听器
@@ -345,9 +347,21 @@ export default function App() {
         style={styles.inputSection}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        {/* 文件预览区域 */}
+        {/* 文件统计和预览区域 */}
         {contentBlocks.length > 0 && (
           <Animated.View style={styles.filePreviewContainer}>
+            <View style={styles.fileStatsContainer}>
+              <Text style={styles.fileStatsText}>
+                {(() => {
+                  const stats = getFileStats();
+                  return `已选择 ${stats.total} 个文件 (${stats.totalSizeFormatted})`;
+                })()}
+              </Text>
+              <TouchableOpacity onPress={resetBlocks} style={styles.clearAllButton}>
+                <MaterialIcons name="clear-all" size={16} color="#666" />
+                <Text style={styles.clearAllText}>清空</Text>
+              </TouchableOpacity>
+            </View>
             <ScrollView 
               horizontal 
               showsHorizontalScrollIndicator={false}
@@ -372,11 +386,15 @@ export default function App() {
             onPress={showFilePicker}
             style={[
               styles.attachButton,
-              isLoading && styles.attachButtonDisabled
+              (isLoading || isProcessing) && styles.attachButtonDisabled
             ]}
-            disabled={isLoading}
+            disabled={isLoading || isProcessing}
           >
-            <MaterialIcons name="add" size={24} color={isLoading ? "#ccc" : "#007AFF"} />
+            {isProcessing ? (
+              <ActivityIndicator size="small" color="#007AFF" />
+            ) : (
+              <MaterialIcons name="add" size={24} color={(isLoading || isProcessing) ? "#ccc" : "#007AFF"} />
+            )}
           </TouchableOpacity>
           
           <TextInput
@@ -569,6 +587,31 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
     paddingVertical: 8,
+  },
+  fileStatsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  fileStatsText: {
+    fontSize: 12,
+    color: '#666',
+    flex: 1,
+  },
+  clearAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: '#f8f8f8',
+    borderRadius: 12,
+  },
+  clearAllText: {
+    fontSize: 12,
+    color: '#666',
+    marginLeft: 4,
   },
   filePreviewContent: {
     paddingHorizontal: 16,
