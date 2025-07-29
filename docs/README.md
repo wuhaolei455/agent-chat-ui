@@ -7,6 +7,7 @@
 - **[Expo SDK升级指南](./EXPO_SDK_UPGRADE.md)** - 从SDK 51升级到SDK 53的完整指南
 - **[Expo SDK 53升级完成](./EXPO_SDK_53_UPGRADE_COMPLETED.md)** - 参考nestjs-monorepo模板成功升级到SDK 53的总结
 - **[Native多媒体功能升级](./NATIVE_MULTIMODAL_UPGRADE.md)** - native应用文件上传和多媒体对话功能完整实现
+- **[RN应用全面优化完成](./RN_OPTIMIZATION_COMPLETE.md)** - 键盘处理、用户体验、性能优化等全方位完善总结
 
 ### 技术架构
 
