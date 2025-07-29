@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -10,7 +10,10 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView
+  SafeAreaView,
+  Keyboard,
+  Animated,
+  Dimensions
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -41,18 +44,47 @@ const getMessageText = (content: MessageContent[]): string => {
 };
 
 // 消息组件
-const MessageBubble: React.FC<{ message: ChatMessage }> = ({ message }) => {
+const MessageBubble: React.FC<{ message: ChatMessage; isAnimating?: boolean }> = ({ 
+  message, 
+  isAnimating = false 
+}) => {
   const isUser = message.role === 'user';
   const textContent = getMessageText(message.content);
   const mediaContent = message.content.filter(
     (item): item is Base64ContentBlock => item.type !== 'text'
   );
+  
+  const fadeAnim = useRef(new Animated.Value(isAnimating ? 0 : 1)).current;
+  const slideAnim = useRef(new Animated.Value(isAnimating ? 20 : 0)).current;
+
+  useEffect(() => {
+    if (isAnimating) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [isAnimating]);
 
   return (
-    <View style={[
-      styles.messageBubble,
-      isUser ? styles.userBubble : styles.assistantBubble
-    ]}>
+    <Animated.View 
+      style={[
+        styles.messageBubble,
+        isUser ? styles.userBubble : styles.assistantBubble,
+        {
+          opacity: fadeAnim,
+          transform: [{ translateY: slideAnim }]
+        }
+      ]}
+    >
       {/* 显示媒体内容 */}
       {mediaContent.length > 0 && (
         <View style={styles.mediaContainer}>
@@ -84,7 +116,7 @@ const MessageBubble: React.FC<{ message: ChatMessage }> = ({ message }) => {
           minute: '2-digit' 
         })}
       </Text>
-    </View>
+    </Animated.View>
   );
 };
 
@@ -92,6 +124,11 @@ export default function App() {
   const [message, setMessage] = useState('');
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [lastMessageId, setLastMessageId] = useState<string | null>(null);
+  
+  const scrollViewRef = useRef<ScrollView>(null);
+  const textInputRef = useRef<TextInput>(null);
   
   const {
     contentBlocks,
@@ -100,6 +137,52 @@ export default function App() {
     showFilePicker,
   } = useFileUpload();
 
+  // 键盘监听器
+  useEffect(() => {
+    const keyboardWillShowListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+        // 延迟滚动到底部，确保键盘完全弹出
+        setTimeout(() => {
+          scrollToBottom();
+        }, 100);
+      }
+    );
+    
+    const keyboardWillHideListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+
+    return () => {
+      keyboardWillShowListener.remove();
+      keyboardWillHideListener.remove();
+    };
+  }, []);
+
+  // 自动滚动到底部
+  const scrollToBottom = () => {
+    if (scrollViewRef.current) {
+      scrollViewRef.current.scrollToEnd({ animated: true });
+    }
+  };
+
+  // 监听聊天历史变化，自动滚动
+  useEffect(() => {
+    if (chatHistory.length > 0) {
+      const newLastMessageId = chatHistory[chatHistory.length - 1].id;
+      if (newLastMessageId !== lastMessageId) {
+        setLastMessageId(newLastMessageId);
+        setTimeout(() => {
+          scrollToBottom();
+        }, 100);
+      }
+    }
+  }, [chatHistory]);
+
   // 发送消息到LangChain API
   const sendMessage = async () => {
     if (!message.trim() && contentBlocks.length === 0) {
@@ -107,6 +190,8 @@ export default function App() {
       return;
     }
 
+    // 收起键盘
+    Keyboard.dismiss();
     setIsLoading(true);
     
     // 构建消息内容
@@ -185,9 +270,19 @@ export default function App() {
       '确定要清空聊天记录吗？',
       [
         { text: '取消', style: 'cancel' },
-        { text: '确定', onPress: () => setChatHistory([]) }
+        { text: '确定', onPress: () => {
+          setChatHistory([]);
+          setLastMessageId(null);
+        }}
       ]
     );
+  };
+
+  // 焦点输入框
+  const focusInput = () => {
+    if (textInputRef.current) {
+      textInputRef.current.focus();
+    }
   };
 
   return (
@@ -197,26 +292,42 @@ export default function App() {
       {/* 标题栏 */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>AI助手</Text>
-        <TouchableOpacity onPress={clearChat} style={styles.clearButton}>
-          <MaterialIcons name="delete-outline" size={24} color="#666" />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={scrollToBottom} style={styles.actionButton}>
+            <MaterialIcons name="keyboard-arrow-down" size={20} color="#666" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={clearChat} style={styles.actionButton}>
+            <MaterialIcons name="delete-outline" size={20} color="#666" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* 聊天消息区域 */}
       <ScrollView 
+        ref={scrollViewRef}
         style={styles.messagesContainer}
-        contentContainerStyle={styles.messagesContent}
+        contentContainerStyle={[
+          styles.messagesContent,
+          { paddingBottom: Math.max(20, keyboardHeight / 4) }
+        ]}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        onContentSizeChange={scrollToBottom}
       >
         {chatHistory.length === 0 ? (
-          <View style={styles.emptyState}>
+          <TouchableOpacity style={styles.emptyState} onPress={focusInput}>
             <MaterialIcons name="chat-bubble-outline" size={48} color="#ccc" />
             <Text style={styles.emptyText}>开始您的对话吧</Text>
             <Text style={styles.emptySubText}>支持文字、图片、视频和文档</Text>
-          </View>
+            <Text style={styles.tapHint}>点击这里开始输入</Text>
+          </TouchableOpacity>
         ) : (
-          chatHistory.map((msg) => (
-            <MessageBubble key={msg.id} message={msg} />
+          chatHistory.map((msg, index) => (
+            <MessageBubble 
+              key={msg.id} 
+              message={msg}
+              isAnimating={index === chatHistory.length - 1 && msg.role === 'assistant'}
+            />
           ))
         )}
         
@@ -232,10 +343,11 @@ export default function App() {
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.inputSection}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         {/* 文件预览区域 */}
         {contentBlocks.length > 0 && (
-          <View style={styles.filePreviewContainer}>
+          <Animated.View style={styles.filePreviewContainer}>
             <ScrollView 
               horizontal 
               showsHorizontalScrollIndicator={false}
@@ -251,27 +363,39 @@ export default function App() {
                 />
               ))}
             </ScrollView>
-          </View>
+          </Animated.View>
         )}
         
         {/* 输入框和按钮 */}
         <View style={styles.inputContainer}>
           <TouchableOpacity 
             onPress={showFilePicker}
-            style={styles.attachButton}
+            style={[
+              styles.attachButton,
+              isLoading && styles.attachButtonDisabled
+            ]}
             disabled={isLoading}
           >
-            <MaterialIcons name="add" size={24} color="#007AFF" />
+            <MaterialIcons name="add" size={24} color={isLoading ? "#ccc" : "#007AFF"} />
           </TouchableOpacity>
           
           <TextInput
+            ref={textInputRef}
             style={styles.messageInput}
             value={message}
             onChangeText={setMessage}
             placeholder="输入消息..."
+            placeholderTextColor="#999"
             multiline
             maxLength={1000}
             editable={!isLoading}
+            textAlignVertical="center"
+            onSubmitEditing={() => {
+              if (!isLoading && (message.trim() || contentBlocks.length > 0)) {
+                sendMessage();
+              }
+            }}
+            blurOnSubmit={false}
           />
           
           <TouchableOpacity 
@@ -308,14 +432,26 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#333',
   },
-  clearButton: {
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  actionButton: {
     padding: 8,
+    marginLeft: 8,
+    borderRadius: 16,
+    backgroundColor: '#f8f8f8',
   },
   messagesContainer: {
     flex: 1,
@@ -329,17 +465,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingTop: 80,
+    paddingHorizontal: 40,
   },
   emptyText: {
     fontSize: 18,
     color: '#666',
     marginTop: 16,
     fontWeight: '500',
+    textAlign: 'center',
   },
   emptySubText: {
     fontSize: 14,
     color: '#999',
     marginTop: 8,
+    textAlign: 'center',
+  },
+  tapHint: {
+    fontSize: 12,
+    color: '#007AFF',
+    marginTop: 16,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   messageBubble: {
     marginBottom: 16,
@@ -351,6 +497,11 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderBottomRightRadius: 4,
     padding: 12,
+    shadowColor: '#007AFF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   assistantBubble: {
     alignSelf: 'flex-start',
@@ -390,6 +541,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 20,
+    marginHorizontal: 40,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   loadingText: {
     marginLeft: 8,
@@ -400,6 +559,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderTopWidth: 1,
     borderTopColor: '#e0e0e0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 5,
   },
   filePreviewContainer: {
     borderBottomWidth: 1,
@@ -424,6 +588,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 8,
   },
+  attachButtonDisabled: {
+    backgroundColor: '#f8f8f8',
+  },
   messageInput: {
     flex: 1,
     borderWidth: 1,
@@ -434,6 +601,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     maxHeight: 100,
     backgroundColor: '#f8f8f8',
+    color: '#333',
   },
   sendButton: {
     width: 36,
@@ -443,8 +611,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: 8,
+    shadowColor: '#007AFF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   sendButtonDisabled: {
     backgroundColor: '#ccc',
+    shadowOpacity: 0,
+    elevation: 0,
   },
 });
