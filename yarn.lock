@@ -6879,6 +6879,11 @@ expo-asset@~11.1.7:
     "@expo/image-utils" "^0.7.6"
     expo-constants "~17.1.7"
 
+expo-av@^15.1.7:
+  version "15.1.7"
+  resolved "http://npm.zhenguanyu.com/expo-av/download/expo-av-15.1.7.tgz#a8422646eca9250c842e8a44fccccb1a4b070a05"
+  integrity sha1-qEImRuypJQyELopE/MzLGksHCgU=
+
 expo-constants@~17.1.7:
   version "17.1.7"
   resolved "http://npm.zhenguanyu.com/expo-constants/download/expo-constants-17.1.7.tgz#35194c1cef51f1ea756333418f1e077be79a012b"
@@ -6886,6 +6891,11 @@ expo-constants@~17.1.7:
   dependencies:
     "@expo/config" "~11.0.12"
     "@expo/env" "~1.0.7"
+
+expo-document-picker@^13.1.6:
+  version "13.1.6"
+  resolved "http://npm.zhenguanyu.com/expo-document-picker/download/expo-document-picker-13.1.6.tgz#d31a14eac7f0d44f6d1eee8d41403499ce07924d"
+  integrity sha1-0xoU6sfw1E9tHu6NQUA0mc4Hkk0=
 
 expo-file-system@~18.1.11:
   version "18.1.11"
@@ -6898,6 +6908,18 @@ expo-font@~13.3.2:
   integrity sha1-G1oaFNaCekij8ANXfV99xrNEodM=
   dependencies:
     fontfaceobserver "^2.1.0"
+
+expo-image-loader@~5.1.0:
+  version "5.1.0"
+  resolved "http://npm.zhenguanyu.com/expo-image-loader/download/expo-image-loader-5.1.0.tgz#f7d65f9b9a9714eaaf5d50a406cb34cb25262153"
+  integrity sha1-99Zfm5qXFOqvXVCkBss0yyUmIVM=
+
+expo-image-picker@^16.1.4:
+  version "16.1.4"
+  resolved "http://npm.zhenguanyu.com/expo-image-picker/download/expo-image-picker-16.1.4.tgz#d4ac2d1f64f6ec9347c3f64f8435b40e6e4dcc40"
+  integrity sha1-1KwtH2T27JNHw/ZPhDW0Dm5NzEA=
+  dependencies:
+    expo-image-loader "~5.1.0"
 
 expo-keep-awake@~14.1.4:
   version "14.1.4"

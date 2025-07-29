@@ -6,6 +6,7 @@
 - **[项目重构总结](./PROJECT_REFACTOR_SUMMARY.md)** - 详细记录了项目从初始状态到生产就绪的完整重构过程
 - **[Expo SDK升级指南](./EXPO_SDK_UPGRADE.md)** - 从SDK 51升级到SDK 53的完整指南
 - **[Expo SDK 53升级完成](./EXPO_SDK_53_UPGRADE_COMPLETED.md)** - 参考nestjs-monorepo模板成功升级到SDK 53的总结
+- **[Native多媒体功能升级](./NATIVE_MULTIMODAL_UPGRADE.md)** - native应用文件上传和多媒体对话功能完整实现
 
 ### 技术架构
 
@@ -25,7 +26,8 @@ agent-chat-ui/
 - **包管理**: Yarn Workspaces + Turborepo
 - **前端**: Next.js 15 + React 19 (Web) / React Native 0.79.5 + Expo SDK 53 (Mobile)
 - **后端**: NestJS + TypeScript
-- **AI集成**: LangChain + OpenAI GPT-4o-mini
+- **AI集成**: LangChain + OpenAI GPT-4o-mini（支持视觉理解）
+- **多媒体**: 图片/视频/文档上传，Base64编码，文件预览
 - **开发工具**: TypeScript + ESLint + Prettier
 
 ### 快速开始
@@ -91,16 +93,22 @@ yarn format
 # 健康检查
 GET /chat/health
 
-# 单轮对话
+# 单轮对话（支持多媒体）
 POST /chat
 {
-  "message": "你好，请介绍一下LangChain"
+  "message": [
+    { "type": "text", "text": "请分析这张图片" },
+    { "type": "image", "source_type": "base64", "mime_type": "image/jpeg", "data": "..." }
+  ]
 }
 
-# 多轮对话
+# 多轮对话（支持多媒体）
 POST /chat/with-history
 {
-  "message": "请继续刚才的话题",
+  "message": [
+    { "type": "text", "text": "请继续刚才的话题" },
+    { "type": "file", "source_type": "base64", "mime_type": "application/pdf", "data": "..." }
+  ],
   "history": [...]
 }
 
@@ -171,6 +179,7 @@ git commit -m "docs: 更新API使用说明"
 - [x] Monorepo架构优化
 - [x] 完整文档编写
 - [x] Expo SDK升级到53版本
+- [x] Native多媒体功能实现
 
 ### 🔄 进行中
 - [ ] 用户认证系统

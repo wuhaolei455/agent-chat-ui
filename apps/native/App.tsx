@@ -7,47 +7,128 @@ import {
   TouchableOpacity, 
   ScrollView,
   Alert,
-  ActivityIndicator 
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { MaterialIcons } from '@expo/vector-icons';
+import { MultimodalPreview, Base64ContentBlock } from './src/components/MultimodalPreview';
+import { useFileUpload } from './src/hooks/useFileUpload';
 
 // API配置
 const API_BASE_URL = 'http://localhost:4000';
 
+// 消息内容类型
+type MessageContent = 
+  | { type: 'text'; text: string }
+  | Base64ContentBlock;
+
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
-  content: string;
+  content: MessageContent[];
   timestamp: Date;
 }
+
+// 获取消息的文本内容
+const getMessageText = (content: MessageContent[]): string => {
+  return content
+    .filter((item): item is { type: 'text'; text: string } => item.type === 'text')
+    .map(item => item.text)
+    .join(' ');
+};
+
+// 消息组件
+const MessageBubble: React.FC<{ message: ChatMessage }> = ({ message }) => {
+  const isUser = message.role === 'user';
+  const textContent = getMessageText(message.content);
+  const mediaContent = message.content.filter(
+    (item): item is Base64ContentBlock => item.type !== 'text'
+  );
+
+  return (
+    <View style={[
+      styles.messageBubble,
+      isUser ? styles.userBubble : styles.assistantBubble
+    ]}>
+      {/* 显示媒体内容 */}
+      {mediaContent.length > 0 && (
+        <View style={styles.mediaContainer}>
+          {mediaContent.map((block, index) => (
+            <MultimodalPreview
+              key={index}
+              block={block}
+              size="md"
+              removable={false}
+            />
+          ))}
+        </View>
+      )}
+      
+      {/* 显示文本内容 */}
+      {textContent && (
+        <Text style={[
+          styles.messageText,
+          isUser ? styles.userText : styles.assistantText
+        ]}>
+          {textContent}
+        </Text>
+      )}
+      
+      {/* 时间戳 */}
+      <Text style={styles.timestamp}>
+        {message.timestamp.toLocaleTimeString('zh-CN', { 
+          hour: '2-digit', 
+          minute: '2-digit' 
+        })}
+      </Text>
+    </View>
+  );
+};
 
 export default function App() {
   const [message, setMessage] = useState('');
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  
+  const {
+    contentBlocks,
+    removeBlock,
+    resetBlocks,
+    showFilePicker,
+  } = useFileUpload();
 
   // 发送消息到LangChain API
   const sendMessage = async () => {
-    if (!message.trim()) {
-      Alert.alert('提示', '请输入消息内容');
+    if (!message.trim() && contentBlocks.length === 0) {
+      Alert.alert('提示', '请输入消息或选择文件');
       return;
     }
 
     setIsLoading(true);
     
+    // 构建消息内容
+    const messageContent: MessageContent[] = [
+      ...(message.trim() ? [{ type: 'text' as const, text: message.trim() }] : []),
+      ...contentBlocks,
+    ];
+    
     // 添加用户消息到历史记录
     const userMessage: ChatMessage = {
       id: `user_${Date.now()}`,
       role: 'user',
-      content: message.trim(),
+      content: messageContent,
       timestamp: new Date(),
     };
     
     setChatHistory(prev => [...prev, userMessage]);
     setMessage('');
+    resetBlocks();
 
     try {
-      // 调用LangChain API
+      // 调用LangChain API（支持多媒体）
       const response = await fetch(`${API_BASE_URL}/chat/with-history`, {
         method: 'POST',
         headers: {
@@ -74,7 +155,7 @@ export default function App() {
       const aiMessage: ChatMessage = {
         id: data.id || `ai_${Date.now()}`,
         role: 'assistant',
-        content: data.content,
+        content: [{ type: 'text', text: data.content }],
         timestamp: new Date(data.timestamp),
       };
 
@@ -88,7 +169,7 @@ export default function App() {
       const errorMessage: ChatMessage = {
         id: `error_${Date.now()}`,
         role: 'assistant',
-        content: '抱歉，我现在无法回复。请稍后再试。',
+        content: [{ type: 'text', text: '抱歉，我现在无法回复。请稍后再试。' }],
         timestamp: new Date(),
       };
       setChatHistory(prev => [...prev, errorMessage]);
@@ -98,85 +179,118 @@ export default function App() {
   };
 
   // 清空聊天历史
-  const clearHistory = () => {
+  const clearChat = () => {
     Alert.alert(
-      '确认',
-      '确定要清空聊天历史吗？',
+      '确认清空',
+      '确定要清空聊天记录吗？',
       [
         { text: '取消', style: 'cancel' },
-        { text: '确定', onPress: () => setChatHistory([]) },
+        { text: '确定', onPress: () => setChatHistory([]) }
       ]
     );
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <StatusBar style="auto" />
       
-      {/* 标题 */}
+      {/* 标题栏 */}
       <View style={styles.header}>
-        <Text style={styles.title}>🤖 Agent Chat Native</Text>
-        <Text style={styles.subtitle}>LangChain集成聊天应用</Text>
-        <TouchableOpacity style={styles.clearButton} onPress={clearHistory}>
-          <Text style={styles.clearButtonText}>清空历史</Text>
+        <Text style={styles.headerTitle}>AI助手</Text>
+        <TouchableOpacity onPress={clearChat} style={styles.clearButton}>
+          <MaterialIcons name="delete-outline" size={24} color="#666" />
         </TouchableOpacity>
       </View>
 
-      {/* 聊天历史 */}
-      <ScrollView style={styles.chatHistory} showsVerticalScrollIndicator={false}>
+      {/* 聊天消息区域 */}
+      <ScrollView 
+        style={styles.messagesContainer}
+        contentContainerStyle={styles.messagesContent}
+        showsVerticalScrollIndicator={false}
+      >
         {chatHistory.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>开始与AI助手对话吧！</Text>
+            <MaterialIcons name="chat-bubble-outline" size={48} color="#ccc" />
+            <Text style={styles.emptyText}>开始您的对话吧</Text>
+            <Text style={styles.emptySubText}>支持文字、图片、视频和文档</Text>
           </View>
         ) : (
           chatHistory.map((msg) => (
-            <View 
-              key={msg.id} 
-              style={[
-                styles.messageContainer,
-                msg.role === 'user' ? styles.userMessage : styles.aiMessage
-              ]}
-            >
-              <Text style={styles.messageRole}>
-                {msg.role === 'user' ? '👤 你' : '🤖 AI'}
-              </Text>
-              <Text style={styles.messageContent}>{msg.content}</Text>
-              <Text style={styles.messageTime}>
-                {msg.timestamp.toLocaleTimeString()}
-              </Text>
-            </View>
+            <MessageBubble key={msg.id} message={msg} />
           ))
         )}
+        
         {isLoading && (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color="#2196F3" />
-            <Text style={styles.loadingText}>AI正在思考中...</Text>
+            <ActivityIndicator size="small" color="#007AFF" />
+            <Text style={styles.loadingText}>AI正在思考...</Text>
           </View>
         )}
       </ScrollView>
 
       {/* 输入区域 */}
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.textInput}
-          value={message}
-          onChangeText={setMessage}
-          placeholder="输入你的消息..."
-          multiline
-          maxLength={500}
-          editable={!isLoading}
-        />
-        <TouchableOpacity 
-          style={[styles.sendButton, isLoading && styles.disabledButton]} 
-          onPress={sendMessage}
-          disabled={isLoading}
-        >
-          <Text style={styles.sendButtonText}>
-            {isLoading ? '发送中...' : '发送'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.inputSection}
+      >
+        {/* 文件预览区域 */}
+        {contentBlocks.length > 0 && (
+          <View style={styles.filePreviewContainer}>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filePreviewContent}
+            >
+              {contentBlocks.map((block, index) => (
+                <MultimodalPreview
+                  key={index}
+                  block={block}
+                  size="sm"
+                  removable
+                  onRemove={() => removeBlock(index)}
+                />
+              ))}
+            </ScrollView>
+          </View>
+        )}
+        
+        {/* 输入框和按钮 */}
+        <View style={styles.inputContainer}>
+          <TouchableOpacity 
+            onPress={showFilePicker}
+            style={styles.attachButton}
+            disabled={isLoading}
+          >
+            <MaterialIcons name="add" size={24} color="#007AFF" />
+          </TouchableOpacity>
+          
+          <TextInput
+            style={styles.messageInput}
+            value={message}
+            onChangeText={setMessage}
+            placeholder="输入消息..."
+            multiline
+            maxLength={1000}
+            editable={!isLoading}
+          />
+          
+          <TouchableOpacity 
+            onPress={sendMessage}
+            style={[
+              styles.sendButton,
+              (isLoading || (!message.trim() && contentBlocks.length === 0)) && styles.sendButtonDisabled
+            ]}
+            disabled={isLoading || (!message.trim() && contentBlocks.length === 0)}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="small" color="white" />
+            ) : (
+              <MaterialIcons name="send" size={20} color="white" />
+            )}
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -184,131 +298,153 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
-    paddingTop: 50,
   },
   header: {
-    backgroundColor: '#2196F3',
-    padding: 20,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: 'white',
-    marginBottom: 5,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.9)',
-    marginBottom: 15,
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
   },
   clearButton: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 20,
+    padding: 8,
   },
-  clearButtonText: {
-    color: 'white',
-    fontSize: 14,
-  },
-  chatHistory: {
+  messagesContainer: {
     flex: 1,
-    padding: 15,
+  },
+  messagesContent: {
+    padding: 16,
+    paddingBottom: 20,
   },
   emptyState: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 100,
+    justifyContent: 'center',
+    paddingTop: 80,
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: 18,
     color: '#666',
-    textAlign: 'center',
+    marginTop: 16,
+    fontWeight: '500',
   },
-  messageContainer: {
-    marginBottom: 15,
-    padding: 15,
-    borderRadius: 10,
-    maxWidth: '85%',
+  emptySubText: {
+    fontSize: 14,
+    color: '#999',
+    marginTop: 8,
   },
-  userMessage: {
-    backgroundColor: '#E3F2FD',
+  messageBubble: {
+    marginBottom: 16,
+    maxWidth: '80%',
+  },
+  userBubble: {
     alignSelf: 'flex-end',
-    borderBottomRightRadius: 3,
+    backgroundColor: '#007AFF',
+    borderRadius: 18,
+    borderBottomRightRadius: 4,
+    padding: 12,
   },
-  aiMessage: {
-    backgroundColor: 'white',
+  assistantBubble: {
     alignSelf: 'flex-start',
-    borderBottomLeftRadius: 3,
+    backgroundColor: 'white',
+    borderRadius: 18,
+    borderBottomLeftRadius: 4,
+    padding: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
   },
-  messageRole: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#666',
-    marginBottom: 5,
+  mediaContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 8,
   },
-  messageContent: {
+  messageText: {
     fontSize: 16,
-    color: '#333',
     lineHeight: 22,
   },
-  messageTime: {
-    fontSize: 11,
+  userText: {
+    color: 'white',
+  },
+  assistantText: {
+    color: '#333',
+  },
+  timestamp: {
+    fontSize: 12,
     color: '#999',
-    marginTop: 8,
-    textAlign: 'right',
+    marginTop: 4,
+    alignSelf: 'flex-end',
   },
   loadingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 15,
+    padding: 16,
   },
   loadingText: {
-    marginLeft: 10,
-    color: '#666',
+    marginLeft: 8,
     fontSize: 14,
+    color: '#666',
   },
-  inputContainer: {
-    flexDirection: 'row',
-    padding: 15,
+  inputSection: {
     backgroundColor: 'white',
     borderTopWidth: 1,
     borderTopColor: '#e0e0e0',
-    alignItems: 'flex-end',
   },
-  textInput: {
+  filePreviewContainer: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    paddingVertical: 8,
+  },
+  filePreviewContent: {
+    paddingHorizontal: 16,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    padding: 16,
+    paddingTop: 12,
+  },
+  attachButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#f0f0f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  messageInput: {
     flex: 1,
     borderWidth: 1,
     borderColor: '#e0e0e0',
-    borderRadius: 25,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    marginRight: 10,
-    maxHeight: 100,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     fontSize: 16,
-    backgroundColor: '#f9f9f9',
+    maxHeight: 100,
+    backgroundColor: '#f8f8f8',
   },
   sendButton: {
-    backgroundColor: '#2196F3',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 25,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#007AFF',
+    alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: 8,
   },
-  disabledButton: {
+  sendButtonDisabled: {
     backgroundColor: '#ccc',
   },
-  sendButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-}); 
+});
